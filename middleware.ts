@@ -24,7 +24,7 @@ export function middleware(request: NextRequest) {
 		(locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`,
 	);
 
-	if (true || pathnameHasLocale) {
+	if (pathnameHasLocale) {
 		return NextResponse.next();
 	}
 
@@ -33,14 +33,9 @@ export function middleware(request: NextRequest) {
 	const locale = defaultLocale;
 	const newUrl = new URL(`/${locale}${pathname}`, request.url);
 
-	console.log("Middleware rewrite:", {
-		original: pathname,
-		rewritten: newUrl.pathname,
-		method: request.method,
-		locale,
-		newUrl,
-		requestUrl: request.url,
-	});
+	console.log(
+		` ${request.method} - Middleware rewrite: ${pathname} → ${newUrl.pathname}`,
+	);
 
 	return NextResponse.rewrite(newUrl);
 }
