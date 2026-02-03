@@ -4,51 +4,49 @@ import { homePageAction } from "./actions";
 import { useEffect, useState } from "react";
 import styles from "./page.module.css";
 
-function getActionScript(actionId: string) {
-	return `fetch('/foo', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'text/plain;charset=UTF-8',
-    'Next-Action': '${actionId}'
-  }
-}).then(r => {  
-  console.log('Response status:', r.status);
-  return r.json();
-}).then(data => {
-  console.log('Response:', data);
-}).catch(err => {
-  console.error('Error:', err);
-});`;
-}
-
 export default function Page({
 	params,
 }: {
 	params: Promise<{ locale: string }>;
 }) {
 	const [locale, setLocale] = useState<string>("");
-	const [actionId, setActionId] = useState<string>("");
-	const [isCalling, setIsCalling] = useState(false);
+	const [isCrashing, setIsCrashing] = useState(false);
 
 	useEffect(() => {
 		params.then((p) => setLocale(p.locale));
 	}, [params]);
 
-	const handleCallAction = async () => {
-		setIsCalling(true);
+	const handleTriggerCrash = async () => {
+		setIsCrashing(true);
 		try {
+			// Get the action ID
 			const id = await homePageAction();
-			setActionId(id);
+
+			// Then trigger the infinite loop by calling the action from /foo
+			fetch("/foo", {
+				method: "POST",
+				headers: {
+					"Content-Type": "text/plain;charset=UTF-8",
+					"Next-Action": id,
+				},
+			})
+				.then((r) => {
+					console.log("Response status:", r.status);
+					return r.json();
+				})
+				.then((data) => {
+					console.log("Response:", data);
+					setIsCrashing(false);
+				})
+				.catch((err) => {
+					console.error("Error:", err);
+					setIsCrashing(false);
+				});
 		} catch (error) {
-			console.error("Failed to call action:", error);
-		} finally {
-			setIsCalling(false);
+			console.error("Failed to trigger crash:", error);
+			setIsCrashing(false);
 		}
 	};
-
-	const testCode = actionId
-		? getActionScript(actionId)
-		: "// Click 'Call Home Page Action' button above to get the action ID...";
 
 	return (
 		<div className={styles.pageContainer}>
@@ -63,31 +61,11 @@ export default function Page({
 				</p>
 			</div>
 
-			<div className={`${styles.sectionBox} ${styles.sectionAction}`}>
-				<h3>Legitimate Action (on this page):</h3>
-				<div className={styles.actionControls}>
-					<button
-						type="button"
-						onClick={handleCallAction}
-						disabled={isCalling}
-						className={`${styles.button} ${styles.buttonPrimary}`}
-					>
-						{isCalling ? "Calling..." : "Call Home Page Action"}
-					</button>
-
-					{actionId && (
-						<div className={styles.actionResult}>
-							<strong>✓ Action ID Captured:</strong> <code>{actionId}</code>
-						</div>
-					)}
-				</div>
-			</div>
-
 			<div className={`${styles.sectionBox} ${styles.sectionLoop}`}>
 				<h3>Infinite Rewrite Loop</h3>
 				<p>
-					Calling the action from a non-existent route causes infinite rewrites
-					because Next.js can't associate the action with that route:
+					Calling the action from a route that is not associated with the server
+					action causes infinite rewrites.
 				</p>
 				<ol>
 					<li>
@@ -106,7 +84,7 @@ export default function Page({
 						Next.js still can't match route, returns <code>/[locale]</code>{" "}
 						again
 					</li>
-					<li>Loop continues → dev server crashes</li>
+					<li>Loop continues until max rewrites (10) is reached</li>
 				</ol>
 				<p className={styles.note}>
 					<strong>Theory:</strong> Next.js uses the pathname template without
@@ -114,30 +92,17 @@ export default function Page({
 					route.
 				</p>
 				<p className={styles.note}>
-					<strong>Note:</strong> This will crash your dev server. Just restart
-					with <code>npm run dev</code>.
+					<strong>Note:</strong> Limited to 10 rewrites to prevent server crash.
+					You'll see a 500 error instead.
 				</p>
-				<div className={styles.buttonControls}>
-					<button
-						type="button"
-						onClick={() => {
-							navigator.clipboard.writeText(testCode);
-							alert(
-								"Code copied! Paste in console to trigger the infinite loop.",
-							);
-						}}
-						disabled={!actionId}
-						className={`${styles.button} ${styles.buttonSmall} ${actionId ? styles.buttonDanger : styles.buttonSecondary}`}
-					>
-						📋 Copy Crash Code
-					</button>
-					<span>
-						{actionId
-							? "Paste in DevTools Console (F12)"
-							: "Call the action first to get the ID"}
-					</span>
-				</div>
-				<pre className={styles.codeBlock}>{testCode}</pre>
+				<button
+					type="button"
+					onClick={handleTriggerCrash}
+					disabled={isCrashing}
+					className={`${styles.button} ${styles.buttonSmall} ${styles.buttonDanger}`}
+				>
+					{isCrashing ? "Triggering..." : "💣 Trigger Infinite Loop"}
+				</button>
 			</div>
 
 			<div className={`${styles.sectionBox} ${styles.sectionLogs}`}>
@@ -146,17 +111,12 @@ export default function Page({
 					<li>
 						Multiple "Middleware rewrite" logs showing the loop:
 						<pre className={styles.codeBlockSmall}>
-							{`Middleware rewrite: /foo → /en-US/foo (POST)
-Middleware rewrite: /[locale] → /en-US/[locale] (POST)
-Middleware rewrite: /[locale] → /en-US/[locale] (POST)
-...`}
+							{`Middleware rewrite [1]: /foo → /en-US/foo (POST)
+Middleware rewrite [2]: /[locale] → /en-US/[locale] (POST)
+Middleware rewrite [3]: /[locale] → /en-US/[locale] (POST)
+...
+failed to forward action response [TypeError: fetch failed] {...`}
 						</pre>
-					</li>
-					<li>
-						<strong>Dev server:</strong> Will hang and stop responding
-					</li>
-					<li>
-						<strong>Browser:</strong> Request will timeout
 					</li>
 				</ul>
 			</div>

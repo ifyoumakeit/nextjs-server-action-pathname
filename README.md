@@ -18,7 +18,9 @@ The middleware rewrites all en-US requests from `/` to `/en-US` internally.
 2. Next.js doesn't associate the action with `/en-US/foo`, falls back to pathname template: `/[locale]`
 3. Middleware sees `/[locale]` (no prefix), rewrites again: `/[locale]` → `/en-US/[locale]`
 4. Next.js still can't match route, returns `/[locale]` again
-5. Loop continues indefinitely, crashing the dev server
+5. Loop continues until max rewrites (10) is reached, returning a 500 error
+
+**Note:** The middleware includes a rewrite counter (max 10) to prevent completely crashing the dev server, but the infinite loop still demonstrates the bug.
 
 This causes issues when:
 - Validating server action origins for security
@@ -36,13 +38,11 @@ This causes issues when:
    npm run dev
    ```
 
-3. **Test the infinite loop (will crash the dev server):**
+3. **Test the infinite loop:**
    - Open [http://localhost:3000](http://localhost:3000)
-   - Click "Call Home Page Action" to capture the action ID
-   - Open browser DevTools Console (F12)
-   - Click "📋 Copy Crash Code" and paste in console
-   - The dev server will hang with infinite rewrite logs
-   - Restart the server with `npm run dev` to continue
+   - Click "💣 Trigger Infinite Loop" button
+   - Check server logs to see the rewrite loop (will hit max of 10 rewrites)
+   - Browser will receive a 500 error response
 
 ## Expected vs Actual
 
@@ -50,17 +50,21 @@ This causes issues when:
 - Invalid server action calls should be rejected or handled gracefully
 
 ### Actual Behavior
-- Calling a server action from `/foo` causes infinite middleware rewrites and crashes the server ❌
+- Calling a server action from `/foo` causes infinite middleware rewrites (stopped at 10) and returns a 500 error ❌
 
 ## Security Implications
 
-- Bad actors can exploit this to trigger infinite loops and crash the server
-- The infinite loop issue is a potential DoS vulnerability
+- Bad actors can exploit this to trigger rewrite loops
+- Without the counter protection, this would be a DoS vulnerability that crashes the server
+- The rewrite counter demonstrates the bug while preventing actual crashes
 
 
 
 ## Files
 
-- `middleware.ts` - Handles i18n routing and rewrites (no loop protection)
-- `app/[locale]/page.tsx` - Home page with server action demonstration
-- `app/[locale]/actions.ts` - Server action that logs pathname information
+- `middleware.ts` - Handles i18n routing with rewrites (includes loop protection counter)
+- `app/[lang]/page.tsx` - Home page with server action demonstration
+- `app/[lang]/actions.ts` - Server action that logs pathname information
+- `i18n-config.ts` - i18n configuration
+- `RESEARCH.md` - Analysis of how next-intl and next-international handle this
+- `PACKAGE_COMPARISON.md` - Comprehensive comparison of i18n packages
